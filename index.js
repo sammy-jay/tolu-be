@@ -95,12 +95,15 @@ app.post("/itrack/create-user", async (req, res)=>{
         } else {
             let encrpytPassword = await bcrypt.hash(req.body.password, 10)
             let newUser = await iTrackUsers.create({...req.body, password: encrpytPassword })
-            if (newUser) {
+            if (newUser._id) {
                 res.status(200).send({message: newUser._id})
+            } else{
+                res.status(201).send({message: "Unsuccessful"})
             }
         }
        
     } catch(error) {
+        console.log(error)
         res.status(500).send({message: "oops"})
     } 
 })

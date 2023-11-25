@@ -16,6 +16,14 @@ set("strictQuery", false);
 app.use(cors()); // Add cors middleware
 app.use(express.json());
 
+let env = process.env.NODE_ENV
+let baseUrl;
+if (env === "development") {
+    baseUrl = "http://localhost:3000"
+} else {
+    baseUrl = "https://itrack-server.vercel.app"
+}
+
 async function connectMongoDB() {
     try {
         let res = await mongoose.connect(process.env.MONGODB_URL);
@@ -96,7 +104,7 @@ app.post("/itrack/create-user", async (req, res)=>{
             let encrpytPassword = await bcrypt.hash(req.body.password, 10)
             let newUser = await iTrackUsers.create({...req.body, password: encrpytPassword })
             if (newUser._id) {
-                res.status(200).send({message: newUser._id})
+                res.status(200).send({message: newUser})
             } else{
                 res.status(201).send({message: "Unsuccessful"})
             }
@@ -125,6 +133,54 @@ app.get("/itrack/transactions", async (req,res) => {
 
 app.post("/itrack/portal-payment", async (req, res) => {
     console.log(req.body)
+    try {
+        let transact = await Transact.find({invoiceId: req.body.invoiceNo})
+        if (transact.length < 1) {
+            res.status(201).send({message: "No transaction relates to this invoice number"})
+        }
+        if (transact[0] && !(transact[0].paidStatus === "paid")) {
+            console.log(transact[0])
+            let customer = JSON.parse(transact[0].customer)
+            
+            try {
+                const tx_ref = req.body.businessName + "-" + req.body.email + "-" + req.body.invoiceNo
+                let url = baseUrl + "/itrack/redirect-url"
+                const response = await got.post("https://api.flutterwave.com/v3/payments", {
+                    headers: {
+                        Authorization: `Bearer ${process.env.FLW_SECRET_KEY}`
+                    },
+                    json: {
+                        tx_ref: tx_ref,
+                        amount: req.body.amount,
+                        currency: "NGN",
+                        redirect_url: url,
+                        meta: {
+                            consumer_id: 23,
+                            consumer_mac: "92a3-912ba-1192a"
+                        },
+                        customer: {
+                            email: customer.email,
+                            phonenumber: customer.phone,
+                            name: customer.name
+                        },
+                        customizations: {
+                            title: "Pied Piper Payments",
+                            logo: "https://www.piedpiper.com/app/themes/joystick-v27/images/logo.png"
+                        }
+                    }
+                }).json();
+                res.status(200).send( {message: response.data.link} )
+            } catch (err) {
+                console.log(err.code);
+                // console.log(err.response.body);
+                res.status(500).send({ message: "Hello, iTrack"})
+            }
+        } else if (transact[0].paidStatus === "paid") {
+            res.status(201).send({message: "No existing debt(s) is/are attached to this invoice number"})
+        }
+    } catch(error) {
+        console.log(error)
+    }
 })
 
 app.post("/itrack/generate-payment-link", async (req,res) => {
@@ -225,10 +281,10 @@ app.get("/itrack/find-user/:id", async(req, res)=> {
 
 app.get("/itrack/redirect-url", async (req, res)=> {
     try {
-         // console.log(req.query)
+         console.log(req.query)
     
-    // let response = await got.get(`https://api.flutterwave.com/v3/transactions/${req.query.transaction_id}/verify`, {
-        let response = await got.get(`https://api.flutterwave.com/v3/transactions/4737790/verify`, {
+    let response = await got.get(`https://api.flutterwave.com/v3/transactions/${req.query.transaction_id}/verify`, {
+        // let response = await got.get(`https://api.flutterwave.com/v3/transactions/4737790/verify`, {
         headers: {
             Authorization: `Bearer ${process.env.FLW_SECRET_KEY}`
         }
@@ -243,6 +299,10 @@ app.get("/itrack/redirect-url", async (req, res)=> {
     if ((invoiceId === trans[0].invoiceId) && (retTxRef === response.data.tx_ref) && (response.status === "success") && (response.data.currency === 'NGN') && (parseFloat(response.data.amount) >= parseFloat(trans[0].amountTotal) )) {
         trans[0].paidStatus = "paid";
         trans[0].save()
+    } else if ((parseFloat(response.data.amount) < parseFloat(trans[0].amountTotal) )) {
+        let debt = parseFloat(trans[0].amountTotal) - parseFloat(response.data.amount)
+        trans[0].debt = debt.toString()
+        tra
     }
     } catch(error) {
         res.status(500).send("Oopsie! Error Connecting/redirect-url")

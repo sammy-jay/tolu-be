@@ -5,7 +5,7 @@ import mongoose, { set } from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 import got from "got";
-import { UniqueID, Transact, Users } from "./models/uniqueId.js";
+import { UniqueID, Transact, iTrackUsers, iTrackCustomers } from "./models/uniqueId.js";
 
 const PORT = 3000
 
@@ -34,29 +34,98 @@ app.get("/", (req, res)=> {
     res.status(200).send("Hello,iTrack: Enyo, Dorcas, Ola")
 })
 
-app.post("/itrack/sign-up", async (req, res) => {
+app.post("/itrack/sign-in", async (req, res) => {
     console.log(req.body)
+    // console.log(await iTrackUsers.find())
     try{
-        const newUser = {
-            firstName: req.body.firstName,
-            lastName: req.body.lastName,
-            email: req.body.email,
-            phone: req.body.phone,
-            businessName: req.body.businessName,
-            password: await bcrypt.hash(req.body.password,10)
-        }
-        const user = await Users.create(newUser)
-        res.status(200).send({message: "User Created Successfully", id:user._id})
+        
+       let user = await iTrackUsers.find({email: req.body.email })
+       console.log(user)
+       let encryptPassword = await bcrypt.compare(req.body.password,user[0].password)
+       if ((user.length >= 1) && (encryptPassword) ) {
+        res.status(200).send({message: user[0]})
+       } else {
+        res.status(201).send({message: "No Such User"})
+       }
     } catch(error) {
-        res.status(500).send({message: "Error Creating User"})
+        res.status(500).send({message: "Error Logging In"})
     }
    
 })
 
 
-app.post("/itrack/pay", async (req,res) => {
-    // console.log(req.body)
+// customers endpoints
+app.get("/itrack/customers", async (req,res) => {
+    console.log(req.body)
+    try {
+        let customers = await iTrackCustomers.find({})
+        if (!customers || customers.length < 1) {
+            res.status(201).send({message: "No Customers Created"})
+        } else {
+            res.status(200).send({
+                count: customers.length,
+                message: customers
+            })
+        }
+    } catch(error) {
+        console.log(error)
+    }
+})
+app.post("/itrack/create-customer", async (req,res) => {
+    console.log(req.body)
+    
+    try {
+        
+        let newCustomer = await iTrackCustomers.create(req.body)
+        console.log("NN")
+        console.log(newCustomer)
+        res.status(200).send({ message: newCustomer } )
+    } catch (error) {
+        console.log(error)
+        res.status(500).send({ message: "Error Creating New Customer" } )
+    }
+})
 
+app.post("/itrack/create-user", async (req, res)=>{
+    try{
+        console.log(req.body)
+        let user = await iTrackUsers.find({email: req.body.email})
+        if(user.length >= 1) {
+            res.status(203).send({message: "User Already Exists"})
+        } else {
+            let encrpytPassword = await bcrypt.hash(req.body.password, 10)
+            let newUser = await iTrackUsers.create({...req.body, password: encrpytPassword })
+            if (newUser) {
+                res.status(200).send({message: newUser._id})
+            }
+        }
+       
+    } catch(error) {
+        res.status(500).send({message: "oops"})
+    } 
+})
+
+// app.pos
+app.get("/itrack/transactions", async (req,res) => {
+    console.log(req.body)
+    try {
+        let transaction = await Transact.find()
+        if (!transaction || transaction.length < 1) {
+            res.status(201).send({message: "No Transaction Recorded"})
+        } else {
+            res.status(200).send({message: transaction})
+        }
+    } catch(error) {
+        console.log(error)
+    }
+})
+
+app.post("/itrack/portal-payment", async (req, res) => {
+    console.log(req.body)
+})
+
+app.post("/itrack/generate-payment-link", async (req,res) => {
+    
     function invoiceId() {
 
     }
@@ -130,6 +199,7 @@ app.get("/itrack/check-transactions", async (req, res) => {
     try{
         let transactions = await Transact.find()
     let count = transactions.length
+    console.log(transactions)
     res.status(200).send({
         count: count,
         transactions: transactions

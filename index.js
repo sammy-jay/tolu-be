@@ -5,6 +5,9 @@ import mongoose, { set } from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 import got from "got";
+import nodemailer from 'nodemailer';
+import {Server} from 'socket.io'
+import http from 'http'
 import { UniqueID, Transact, iTrackUsers, iTrackCustomers } from "./models/uniqueId.js";
 
 const PORT = 3000
@@ -17,12 +20,15 @@ app.use(cors()); // Add cors middleware
 app.use(express.json());
 
 let env = process.env.NODE_ENV
-let baseUrl;
+let baseUrl, feURL;
 if (env === "development") {
     baseUrl = "http://localhost:3000"
+    feURL = "http://localhost:5173"
 } else {
     baseUrl = "https://itrack-server.vercel.app"
+    feURL = "https://itrack-client.vercel.app"
 }
+
 
 async function connectMongoDB() {
     try {
@@ -34,9 +40,7 @@ async function connectMongoDB() {
  
 }
 connectMongoDB();
-// http://localhost:3000/api/itrack/webhook
-// itrack-G319
-// console.log(process.env.FLW_SECRET_KEY)
+
 
 app.get("/", (req, res)=> {
     res.status(200).send("Hello,iTrack: Enyo, Dorcas, Ola")
@@ -63,10 +67,11 @@ app.post("/itrack/sign-in", async (req, res) => {
 
 
 // customers endpoints
-app.get("/itrack/customers", async (req,res) => {
+app.post("/itrack/customers", async (req,res) => {
     console.log(req.body)
     try {
-        let customers = await iTrackCustomers.find({})
+        let customers = await iTrackCustomers.find({sellerEmail: req.body.sellerEmail})
+        console.log(customers)
         if (!customers || customers.length < 1) {
             res.status(201).send({message: "No Customers Created"})
         } else {
@@ -79,8 +84,11 @@ app.get("/itrack/customers", async (req,res) => {
         console.log(error)
     }
 })
+
+
 app.post("/itrack/create-customer", async (req,res) => {
     console.log(req.body)
+    // await iTrackCustomers.deleteMany()
     
     try {
         
@@ -93,6 +101,8 @@ app.post("/itrack/create-customer", async (req,res) => {
         res.status(500).send({ message: "Error Creating New Customer" } )
     }
 })
+
+// app.get("/delete")
 
 app.post("/itrack/create-user", async (req, res)=>{
     try{
@@ -117,14 +127,18 @@ app.post("/itrack/create-user", async (req, res)=>{
 })
 
 // app.pos
-app.get("/itrack/transactions", async (req,res) => {
+app.post("/itrack/transactions", async (req,res) => {
     console.log(req.body)
     try {
         let transaction = await Transact.find()
-        if (!transaction || transaction.length < 1) {
+        // transaction = transaction.filter(ite)
+        // console.log(transaction)
+        let newTransaction = transaction.filter(items=> JSON.parse(items.seller).email === req.body.sellerEmail )
+        console.log(newTransaction)
+        if (!newTransaction || newTransaction.length < 1) {
             res.status(201).send({message: "No Transaction Recorded"})
         } else {
-            res.status(200).send({message: transaction})
+            res.status(200).send({message: newTransaction})
         }
     } catch(error) {
         console.log(error)
@@ -140,10 +154,10 @@ app.post("/itrack/portal-payment", async (req, res) => {
         }
         if (transact[0] && !(transact[0].paidStatus === "paid")) {
             console.log(transact[0])
-            let customer = JSON.parse(transact[0].customer)
+            let customer = transact[0].customer
             
             try {
-                const tx_ref = req.body.businessName + "-" + req.body.email + "-" + req.body.invoiceNo
+                const tx_ref = req.body.businessEmail + "-" + req.body.email + "-" + req.body.invoiceNo
                 let url = baseUrl + "/itrack/redirect-url"
                 const response = await got.post("https://api.flutterwave.com/v3/payments", {
                     headers: {
@@ -159,9 +173,7 @@ app.post("/itrack/portal-payment", async (req, res) => {
                             consumer_mac: "92a3-912ba-1192a"
                         },
                         customer: {
-                            email: customer.email,
-                            phonenumber: customer.phone,
-                            name: customer.name
+                            email: customer,
                         },
                         customizations: {
                             title: "Pied Piper Payments",
@@ -183,16 +195,14 @@ app.post("/itrack/portal-payment", async (req, res) => {
     }
 })
 
-app.post("/itrack/generate-payment-link", async (req,res) => {
-    
-    function invoiceId() {
+app.post("/itrack/invoice-payment-link", async (req,res) => {
+    console.log(req.body)
+   
+    const seller = req.body.seller
+    const customer = req.body.customer
+    const products = req.body.products
 
-    }
-    const seller = JSON.stringify(req.body.seller);
-    const customer = JSON.stringify(req.body.customer);
-    const products = JSON.stringify(req.body.products);
-
-    const { amountTotal, discount, dateIssued, paidStatus, duePayDate } = req.body
+    const { amountTotal, dateIssued, paidStatus, duePayDate , debt } = req.body
     
     let oldID = await UniqueID.find({})
     oldID[0].id =   oldID[0].id + 1
@@ -204,21 +214,32 @@ app.post("/itrack/generate-payment-link", async (req,res) => {
         "customer": customer,
         "products": products,
         "amountTotal": amountTotal,
-        "discount": discount,
+        "discount": "0",
         "dateIssued": dateIssued,
         "paidStatus": paidStatus,
         "duePayDate": duePayDate,
+        "debt": debt,
         "invoiceId": user_id
     } 
 
     let user = await Transact.create(userTransact)
+    let findCustomer = await iTrackCustomers.find({email: req.body.customer, sellerEmail: JSON.parse(req.body.seller).email })
+    if (findCustomer.length === 1 ) {
+        findCustomer[0].debt =  (parseFloat(findCustomer[0].debt) + parseFloat(debt)).toString()
+        findCustomer[0].save()
+    }
+
     // console.log(user)
 
-    const tx_ref = req.body.seller.name + "-" + req.body.customer.email + "-" + user_id
+    const tx_ref = JSON.parse(req.body.seller).email  + "-" + req.body.customer + "-" + user_id
 
     if (paidStatus !== "paid") {
 
         try {
+
+            let detailsCustomer = await iTrackCustomers.find({sellerEmail:JSON.parse(req.body.seller).email, email:req.body.customer})
+            console.log(detailsCustomer)
+            let redirect_url = baseUrl + "/itrack/redirect-url"
             const response = await got.post("https://api.flutterwave.com/v3/payments", {
                 headers: {
                     Authorization: `Bearer ${process.env.FLW_SECRET_KEY}`
@@ -227,15 +248,15 @@ app.post("/itrack/generate-payment-link", async (req,res) => {
                     tx_ref: tx_ref,
                     amount: amountTotal,
                     currency: "NGN",
-                    redirect_url: "http://localhost:3000/itrack/redirect-url",
+                    redirect_url: redirect_url,
                     meta: {
                         consumer_id: 23,
                         consumer_mac: "92a3-912ba-1192a"
                     },
                     customer: {
-                        email: req.body.customer.email,
-                        phonenumber: req.body.customer.phone,
-                        name: req.body.customer.name
+                        email: detailsCustomer[0].email,
+                        phonenumber: detailsCustomer[0].phone,
+                        name: detailsCustomer[0].firstName + detailsCustomer[0].lastName
                     },
                     customizations: {
                         title: "Pied Piper Payments",
@@ -243,14 +264,41 @@ app.post("/itrack/generate-payment-link", async (req,res) => {
                     }
                 }
             }).json();
-            res.status(200).send( {message: response.data.link} )
+            user.paymentLink = response.data.link
+            user.save()
+
+            var transporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: {
+                    user: "elijahdimeji549@gmail.com",
+                    pass: "bkcd hmcn giph zkxk"
+                }
+            });
+
+            var mailOptions = {
+                from: "elijahdimeji549@gmail.com",
+                to: user.customer,
+                subject: "An Invoice Receipt from {{businessName}}",
+                html: `<h3>Click <a href=${response.data.link}>here</a> to make payment</h3>`
+            }
+
+            transporter.sendMail(mailOptions, (error, info)=> {
+                if (error) {
+                    console.log(error)
+                } else {
+                    console.log(`Email sent: ${info.response}`)
+                }
+            })
+
+            res.status(200).send( {message: user} )
         } catch (err) {
             console.log(err.code);
+            console.log("ll")
             // console.log(err.response.body);
             res.status(500).send({ message: "Hello, iTrack"})
         }
     } else {
-        res.status(201).send({message: user_id})
+        res.status(201).send({message: user})
     }
 })
 
@@ -281,7 +329,7 @@ app.get("/itrack/find-user/:id", async(req, res)=> {
 
 app.get("/itrack/redirect-url", async (req, res)=> {
     try {
-         console.log(req.query)
+        console.log(req.query)
     
     let response = await got.get(`https://api.flutterwave.com/v3/transactions/${req.query.transaction_id}/verify`, {
         // let response = await got.get(`https://api.flutterwave.com/v3/transactions/4737790/verify`, {
@@ -298,11 +346,12 @@ app.get("/itrack/redirect-url", async (req, res)=> {
     res.status(200).send("Redirected")
     if ((invoiceId === trans[0].invoiceId) && (retTxRef === response.data.tx_ref) && (response.status === "success") && (response.data.currency === 'NGN') && (parseFloat(response.data.amount) >= parseFloat(trans[0].amountTotal) )) {
         trans[0].paidStatus = "paid";
+        trans[0].debt = "0"
         trans[0].save()
     } else if ((parseFloat(response.data.amount) < parseFloat(trans[0].amountTotal) )) {
         let debt = parseFloat(trans[0].amountTotal) - parseFloat(response.data.amount)
         trans[0].debt = debt.toString()
-        tra
+        
     }
     } catch(error) {
         res.status(500).send("Oopsie! Error Connecting/redirect-url")
@@ -314,3 +363,4 @@ app.get("/itrack/redirect-url", async (req, res)=> {
 app.listen(PORT, (req, res)=> {
     console.log(`iTrack server listening on port ${PORT}`)
 })
+// server.listen(PORT, ()=> "SERVING ")

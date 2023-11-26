@@ -46,6 +46,25 @@ app.get("/", (req, res)=> {
     res.status(200).send("Hello,iTrack: Enyo, Dorcas, Ola")
 })
 
+app.get("/itrack/emit", async (req, res)=> {
+    console.log("emit")
+    try {
+        let dueArr = []
+        let currentDate = new Date().toLocaleDateString('en-GB')
+        let trans = await Transact.find()
+        for (let items of trans) {
+            let dueDate = items.duePayDate.split("-").reverse().join("/")
+            if (dueDate === currentDate) {
+                dueArr.push(items)
+            }
+        }
+        res.status(200).send({message: dueArr})
+    } catch(error) {
+        res.status(500).send({message: "Error"})
+        console.log(error)
+    }
+})
+
 app.post("/itrack/sign-in", async (req, res) => {
     console.log(req.body)
     // console.log(await iTrackUsers.find())

@@ -306,7 +306,7 @@ app.post("/itrack/invoice-payment-link", async (req,res) => {
                 },
                 json: {
                     tx_ref: tx_ref,
-                    amount: amountTotal - debt,
+                    amount: (parseFloat(amountTotal) - parseFloat(debt)).toString(),
                     currency: "NGN",
                     redirect_url: redirect_url,
                     meta: {
@@ -402,8 +402,8 @@ app.get("/itrack/redirect-url", async (req, res)=> {
     let retTxRef = response.data.narration + "-" + response.data.customer.email + "-"+  invoiceId
     // console.log(retTxRef === response.data.tx_ref)
     let trans = await Transact.find({invoiceId: invoiceId})
-    console.log(trans)
-    res.status(200).send("Redirected")
+    // console.log(trans)
+    
     if ((invoiceId === trans[0].invoiceId) && (retTxRef === response.data.tx_ref) && (response.status === "success") && (response.data.currency === 'NGN') && (parseFloat(response.data.amount) >= parseFloat(trans[0].amountTotal) )) {
         trans[0].paidStatus = "paid";
         trans[0].debt = "0"
@@ -413,6 +413,7 @@ app.get("/itrack/redirect-url", async (req, res)=> {
         trans[0].debt = debt.toString()
         
     }
+    res.status(200).send("Redirected")
     } catch(error) {
         res.status(500).send("Oopsie! Error Connecting/redirect-url")
     }

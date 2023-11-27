@@ -43,11 +43,49 @@ connectMongoDB();
 
 
 app.get("/", (req, res)=> {
+    console.log(req.body)
     res.status(200).send("Hello,iTrack: Enyo, Dorcas, Ola")
 })
 
+app.post("/itrack/dashboard", async (req,res)=> {
+    try {
+        let customers = await iTrackCustomers.find({})
+        let totalCustomers = customers.length >= 1 ? customers.length : 0
+        let totalPaid = 0
+        let totalDebt = 0
+        let totalInvoice = 0
+        let totalDebtCount = 0
+        let totalPaidCount = 0
+        let transact = await Transact.find({})
+        if (transact.length >= 1 ) {
+            totalInvoice = transact.length
+            for (let items of transact){
+                if (items.paidStatus === "paid") {
+                    totalPaid += parseFloat(items.amountTotal)
+                    totalPaidCount += 1
+                } else {
+                    totalDebt += parseFloat(items.debt)
+                    totalDebtCount += 1
+                }
+            }
+        }
+        let dashboardObj = {
+            totalCustomers: totalCustomers,
+            totalPaid : totalPaid,
+            totalInvoice : totalInvoice,
+            totalDebt : totalDebt,
+            totalDebtCount: totalDebtCount,
+            totalPaidCount: totalPaidCount
+        }
+        res.status(200).send({ message: dashboardObj})
+    } catch(error) {
+        res.status(500).send({message: "Error"})
+        console.log(error)
+    }
+})
+
 app.get("/itrack/emit", async (req, res)=> {
-    console.log("emit")
+    // console.log("emit")
     try {
         let dueArr = []
         let currentDate = new Date().toLocaleDateString('en-GB')
@@ -265,7 +303,7 @@ app.post("/itrack/invoice-payment-link", async (req,res) => {
                 },
                 json: {
                     tx_ref: tx_ref,
-                    amount: amountTotal,
+                    amount: amountTotal - debt,
                     currency: "NGN",
                     redirect_url: redirect_url,
                     meta: {

@@ -217,7 +217,8 @@ app.post("/itrack/portal-payment", async (req, res) => {
             let customer = transact[0].customer
             
             try {
-                const tx_ref = req.body.businessEmail + "-" + req.body.email + "-" + req.body.invoiceNo
+                let rdm = Math.floor(Math.random() * 100).toString()
+                const tx_ref = req.body.businessEmail + "-" + req.body.email + "-" + req.body.invoiceNo +  "-" + rdm
                 let url = baseUrl + "/itrack/redirect-url"
                 const response = await got.post("https://api.flutterwave.com/v3/payments", {
                     headers: {
@@ -399,11 +400,12 @@ app.get("/itrack/redirect-url", async (req, res)=> {
     }).json()
     // console.log(response)
     let invoiceId = response.data.tx_ref.split("-")[2]
+    console.log(invoiceId)
     let retTxRef = response.data.narration + "-" + response.data.customer.email + "-"+  invoiceId
     // console.log(retTxRef === response.data.tx_ref)
     let trans = await Transact.find({invoiceId: invoiceId})
-    // console.log(trans)
-    
+    console.log(trans[0])
+    console.log(trans[0].debt)
     if ((invoiceId === trans[0].invoiceId) && (retTxRef === response.data.tx_ref) && (response.status === "success") && (response.data.currency === 'NGN') && (parseFloat(response.data.amount) >= parseFloat(trans[0].amountTotal) )) {
         trans[0].paidStatus = "paid";
         trans[0].debt = "0"
@@ -411,6 +413,7 @@ app.get("/itrack/redirect-url", async (req, res)=> {
     } else if ((parseFloat(response.data.amount) < parseFloat(trans[0].amountTotal) )) {
         let debt = parseFloat(trans[0].amountTotal) - parseFloat(response.data.amount)
         trans[0].debt = debt.toString()
+        trans[0].save()
         
     }
     res.status(200).send("Redirected")

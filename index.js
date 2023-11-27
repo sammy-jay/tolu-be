@@ -48,8 +48,9 @@ app.get("/", (req, res)=> {
 })
 
 app.post("/itrack/dashboard", async (req,res)=> {
+    console.log(req.body)
     try {
-        let customers = await iTrackCustomers.find({})
+        let customers = await iTrackCustomers.find({sellerEmail: req.body.sellerEmail})
         let totalCustomers = customers.length >= 1 ? customers.length : 0
         let totalPaid = 0
         let totalDebt = 0
@@ -57,6 +58,8 @@ app.post("/itrack/dashboard", async (req,res)=> {
         let totalDebtCount = 0
         let totalPaidCount = 0
         let transact = await Transact.find({})
+        transact = transact.filter(items=> JSON.parse(items.seller).email === req.body.sellerEmail)
+        console.log(transact)
         if (transact.length >= 1 ) {
             totalInvoice = transact.length
             for (let items of transact){

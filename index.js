@@ -13,6 +13,8 @@ import { UniqueID, Transact, iTrackUsers, iTrackCustomers } from "./models/uniqu
 const PORT = 3000
 
 const app = express();
+const server = http.createServer(app)
+
 dotenv.config();
 set("strictQuery", false);
 
@@ -30,6 +32,12 @@ if (env === "development") {
 }
 
 
+const io = new Server(server, {
+    cors: {
+        origin: feURL,
+        methods: ['GET', 'POST'],
+    }
+})
 async function connectMongoDB() {
     try {
         let res = await mongoose.connect(process.env.MONGODB_URL);
@@ -42,13 +50,48 @@ async function connectMongoDB() {
 connectMongoDB();
 
 
+
+io.on("connection", (socket)=>{
+    // console.log(`Socket ${socket.id} connected`);
+
+    socket.on("checkDues", async (data) => {
+        // console.log(data)
+        try {
+            let dueArr = []
+            let currentDate = new Date().toLocaleDateString('en-GB')
+            let transaction = await Transact.find()
+            let newTransaction = transaction.filter(items=> JSON.parse(items.seller).email === data.email )
+            // let trans = await Transact.find()
+            for (let items of newTransaction) {
+                let dueDate = items.duePayDate.split("-").reverse().join("/")
+                // console.log(dueDate)
+                if (dueDate === currentDate) {
+                    dueArr.push(items)
+                }
+            }
+            if (dueArr.length >= 1) {
+                // console.log(dueArr)
+                io.emit("message", {message: dueArr})
+                // res.status(200).send({message: dueArr})
+            } else {
+                io.emit("message", "")
+                // res.status(201).send({message: ""})
+            }
+            
+        } catch(error) {
+            io.emit("message", "")
+            console.log(error)
+        }
+    })
+})
+
 app.get("/", (req, res)=> {
-    console.log(req.body)
+    // console.log(req.body)
     res.status(200).send("Hello,iTrack: Enyo, Dorcas, Ola")
 })
 
 app.post("/itrack/dashboard", async (req,res)=> {
-    console.log(req.body)
+    // console.log(req.body)
     try {
         let customers = await iTrackCustomers.find({sellerEmail: req.body.sellerEmail})
         let totalCustomers = customers.length >= 1 ? customers.length : 0
@@ -59,7 +102,7 @@ app.post("/itrack/dashboard", async (req,res)=> {
         let totalPaidCount = 0
         let transact = await Transact.find({})
         transact = transact.filter(items=> JSON.parse(items.seller).email === req.body.sellerEmail)
-        console.log(transact)
+        // console.log(transact)
         if (transact.length >= 1 ) {
             totalInvoice = transact.length
             for (let items of transact){
@@ -87,32 +130,39 @@ app.post("/itrack/dashboard", async (req,res)=> {
     }
 })
 
-app.get("/itrack/emit", async (req, res)=> {
-    // console.log("emit")
+app.post("/itrack/emit", async (req, res)=> {
     try {
         let dueArr = []
         let currentDate = new Date().toLocaleDateString('en-GB')
-        let trans = await Transact.find()
-        for (let items of trans) {
+        let transaction = await Transact.find()
+        let newTransaction = transaction.filter(items=> JSON.parse(items.seller).email === req.body.sellerEmail )
+        // let trans = await Transact.find()
+        for (let items of newTransaction) {
             let dueDate = items.duePayDate.split("-").reverse().join("/")
+            // console.log(dueDate)
             if (dueDate === currentDate) {
                 dueArr.push(items)
             }
         }
-        res.status(200).send({message: dueArr})
+        if (dueArr.length >= 1) {
+            res.status(200).send({message: dueArr})
+        } else {
+            res.status(201).send({message: ""})
+        }
+        
     } catch(error) {
-        res.status(500).send({message: "Error"})
+        res.status(500).send({message: ""})
         console.log(error)
     }
 })
 
 app.post("/itrack/sign-in", async (req, res) => {
-    console.log(req.body)
+    // console.log(req.body)
     // console.log(await iTrackUsers.find())
     try{
         
        let user = await iTrackUsers.find({email: req.body.email })
-       console.log(user)
+    //    console.log(user)
        let encryptPassword = await bcrypt.compare(req.body.password,user[0].password)
        if ((user.length >= 1) && (encryptPassword) ) {
         res.status(200).send({message: user[0]})
@@ -128,10 +178,10 @@ app.post("/itrack/sign-in", async (req, res) => {
 
 // customers endpoints
 app.post("/itrack/customers", async (req,res) => {
-    console.log(req.body)
+    // console.log(req.body)
     try {
         let customers = await iTrackCustomers.find({sellerEmail: req.body.sellerEmail})
-        console.log(customers)
+        // console.log(customers)
         if (!customers || customers.length < 1) {
             res.status(201).send({message: "No Customers Created"})
         } else {
@@ -147,13 +197,13 @@ app.post("/itrack/customers", async (req,res) => {
 
 
 app.post("/itrack/create-customer", async (req,res) => {
-    console.log(req.body)
+    // console.log(req.body)
     // await iTrackCustomers.deleteMany()
     
     try {
         
         let newCustomer = await iTrackCustomers.create(req.body)
-        console.log("NN")
+        // console.log("NN")
         console.log(newCustomer)
         res.status(200).send({ message: newCustomer } )
     } catch (error) {
@@ -166,7 +216,7 @@ app.post("/itrack/create-customer", async (req,res) => {
 
 app.post("/itrack/create-user", async (req, res)=>{
     try{
-        console.log(req.body)
+        // console.log(req.body)
         let user = await iTrackUsers.find({email: req.body.email})
         if(user.length >= 1) {
             res.status(203).send({message: "User Already Exists"})
@@ -188,13 +238,11 @@ app.post("/itrack/create-user", async (req, res)=>{
 
 // app.pos
 app.post("/itrack/transactions", async (req,res) => {
-    console.log(req.body)
+    // console.log(req.body)
     try {
         let transaction = await Transact.find()
-        // transaction = transaction.filter(ite)
-        // console.log(transaction)
         let newTransaction = transaction.filter(items=> JSON.parse(items.seller).email === req.body.sellerEmail )
-        console.log(newTransaction)
+        // console.log(newTransaction)
         if (!newTransaction || newTransaction.length < 1) {
             res.status(201).send({message: "No Transaction Recorded"})
         } else {
@@ -206,14 +254,14 @@ app.post("/itrack/transactions", async (req,res) => {
 })
 
 app.post("/itrack/portal-payment", async (req, res) => {
-    console.log(req.body)
+    // console.log(req.body)
     try {
         let transact = await Transact.find({invoiceId: req.body.invoiceNo})
         if (transact.length < 1) {
             res.status(201).send({message: "No transaction relates to this invoice number"})
         }
         if (transact[0] && !(transact[0].paidStatus === "paid")) {
-            console.log(transact[0])
+            // console.log(transact[0])
             let customer = transact[0].customer
             
             try {
@@ -257,7 +305,7 @@ app.post("/itrack/portal-payment", async (req, res) => {
 })
 
 app.post("/itrack/invoice-payment-link", async (req,res) => {
-    console.log(req.body)
+    // console.log(req.body)
    
     const seller = req.body.seller
     const customer = req.body.customer
@@ -299,7 +347,7 @@ app.post("/itrack/invoice-payment-link", async (req,res) => {
         try {
 
             let detailsCustomer = await iTrackCustomers.find({sellerEmail:JSON.parse(req.body.seller).email, email:req.body.customer})
-            console.log(detailsCustomer)
+            // console.log(detailsCustomer)
             let redirect_url = baseUrl + "/itrack/redirect-url"
             const response = await got.post("https://api.flutterwave.com/v3/payments", {
                 headers: {
@@ -367,7 +415,7 @@ app.get("/itrack/check-transactions", async (req, res) => {
     try{
         let transactions = await Transact.find()
     let count = transactions.length
-    console.log(transactions)
+    // console.log(transactions)
     res.status(200).send({
         count: count,
         transactions: transactions
@@ -390,7 +438,7 @@ app.get("/itrack/find-user/:id", async(req, res)=> {
 
 app.get("/itrack/redirect-url", async (req, res)=> {
     try {
-        console.log(req.query)
+        // console.log(req.query)
     
     let response = await got.get(`https://api.flutterwave.com/v3/transactions/${req.query.transaction_id}/verify`, {
         // let response = await got.get(`https://api.flutterwave.com/v3/transactions/4737790/verify`, {
@@ -400,12 +448,12 @@ app.get("/itrack/redirect-url", async (req, res)=> {
     }).json()
     // console.log(response)
     let invoiceId = response.data.tx_ref.split("-")[2]
-    console.log(invoiceId)
+    // console.log(invoiceId)
     let retTxRef = response.data.narration + "-" + response.data.customer.email + "-"+  invoiceId
     // console.log(retTxRef === response.data.tx_ref)
     let trans = await Transact.find({invoiceId: invoiceId})
-    console.log(trans[0])
-    console.log(trans[0].debt)
+    // console.log(trans[0])
+    // console.log(trans[0].debt)
     if ((invoiceId === trans[0].invoiceId) && (retTxRef === response.data.tx_ref) && (response.status === "success") && (response.data.currency === 'NGN') && (parseFloat(response.data.amount) >= parseFloat(trans[0].amountTotal) )) {
         trans[0].paidStatus = "paid";
         trans[0].debt = "0"
@@ -424,7 +472,7 @@ app.get("/itrack/redirect-url", async (req, res)=> {
 })
 
 
-app.listen(PORT, (req, res)=> {
+server.listen(PORT, (req, res)=> {
     console.log(`iTrack server listening on port ${PORT}`)
 })
 // server.listen(PORT, ()=> "SERVING ")

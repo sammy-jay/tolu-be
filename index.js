@@ -459,7 +459,7 @@ app.get("/itrack/redirect-url", async (req, res)=> {
     let trans = await Transact.find({invoiceId: invoiceId})
     // console.log(trans[0])
     // console.log(trans[0].debt)
-    if ((invoiceId === trans[0].invoiceId) && (retTxRef === response.data.tx_ref) && (response.status === "success") && (response.data.currency === 'NGN') && (parseFloat(response.data.amount) >= parseFloat(trans[0].amountTotal) )) {
+    if ((invoiceId === trans[0].invoiceId) && (retTxRef === response.data.tx_ref) && (response.status === "success") && (response.data.currency === 'NGN') && (parseFloat(response.data.amount) >= parseFloat(trans[0].debt) )) {
         trans[0].paidStatus = "paid";
         trans[0].debt = "0"
         trans[0].save()

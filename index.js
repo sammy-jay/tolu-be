@@ -24,11 +24,12 @@ app.use(express.json());
 let env = process.env.NODE_ENV
 let baseUrl, feURL;
 if (env === "development") {
-    baseUrl = "http://localhost:3000"
-    feURL = "http://localhost:5173"
+    baseUrl = "https://3000-sammyjay-awsfullstackap-ufq5o72d322.ws-eu106.gitpod.io"
+    feURL =
+      "https://5173-sammyjay-awsfullstackap-ufq5o72d322.ws-eu106.gitpod.io";
 } else {
-    baseUrl = "https://itrack-server.vercel.app"
-    feURL = "https://itrack-client.vercel.app"
+    baseUrl = "https://itrack-server-2.vercel.app"
+    feURL = "https://itrack-2.vercel.app"
 }
 
 
@@ -51,39 +52,39 @@ connectMongoDB();
 
 
 
-io.on("connection", (socket)=>{
-    // console.log(`Socket ${socket.id} connected`);
+// io.on("connection", (socket)=>{
+//     // console.log(`Socket ${socket.id} connected`);
 
-    socket.on("checkDues", async (data) => {
-        // console.log(data)
-        try {
-            let dueArr = []
-            let currentDate = new Date().toLocaleDateString('en-GB')
-            let transaction = await Transact.find()
-            let newTransaction = transaction.filter(items=> JSON.parse(items.seller).email === data.email )
-            // let trans = await Transact.find()
-            for (let items of newTransaction) {
-                let dueDate = items.duePayDate.split("-").reverse().join("/")
-                // console.log(dueDate)
-                if (dueDate === currentDate) {
-                    dueArr.push(items)
-                }
-            }
-            if (dueArr.length >= 1) {
-                // console.log(dueArr)
-                io.emit("message", {message: dueArr})
-                // res.status(200).send({message: dueArr})
-            } else {
-                io.emit("message", "")
-                // res.status(201).send({message: ""})
-            }
+//     socket.on("checkDues", async (data) => {
+//         // console.log(data)
+//         try {
+//             let dueArr = []
+//             let currentDate = new Date().toLocaleDateString('en-GB')
+//             let transaction = await Transact.find()
+//             let newTransaction = transaction.filter(items=> JSON.parse(items.seller).email === data.email )
+//             // let trans = await Transact.find()
+//             for (let items of newTransaction) {
+//                 let dueDate = items.duePayDate.split("-").reverse().join("/")
+//                 // console.log(dueDate)
+//                 if (dueDate === currentDate) {
+//                     dueArr.push(items)
+//                 }
+//             }
+//             if (dueArr.length >= 1) {
+//                 // console.log(dueArr)
+//                 io.emit("message", {message: dueArr})
+//                 // res.status(200).send({message: dueArr})
+//             } else {
+//                 io.emit("message", "")
+//                 // res.status(201).send({message: ""})
+//             }
             
-        } catch(error) {
-            io.emit("message", "")
-            console.log(error)
-        }
-    })
-})
+//         } catch(error) {
+//             io.emit("message", "")
+//             console.log(error)
+//         }
+//     })
+// })
 
 app.get("/", (req, res)=> {
     // console.log(req.body)

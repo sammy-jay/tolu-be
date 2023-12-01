@@ -18,7 +18,11 @@ const server = http.createServer(app)
 dotenv.config();
 set("strictQuery", false);
 
-app.use(cors()); // Add cors middleware
+app.use(
+  cors({
+    origin: "*",
+  })
+); // Add cors middleware
 app.use(express.json());
 
 let env = process.env.NODE_ENV

@@ -463,8 +463,8 @@ app.get("/itrack/redirect-url", async (req, res)=> {
         trans[0].paidStatus = "paid";
         trans[0].debt = "0"
         trans[0].save()
-    } else if ((parseFloat(response.data.amount) < parseFloat(trans[0].amountTotal) )) {
-        let debt = parseFloat(trans[0].amountTotal) - parseFloat(response.data.amount)
+    } else if ((parseFloat(response.data.amount) < parseFloat(trans[0].debt) )) {
+        let debt = parseFloat(trans[0].debt) - parseFloat(response.data.amount)
         trans[0].debt = debt.toString()
         trans[0].save()
         

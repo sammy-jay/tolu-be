@@ -136,6 +136,8 @@ app.post("/itrack/dashboard", async (req,res)=> {
 })
 
 app.post("/itrack/emit", async (req, res)=> {
+    console.log(req.body)
+    // return 
     try {
         let dueArr = []
         let currentDate = new Date().toLocaleDateString('en-GB')
@@ -143,11 +145,21 @@ app.post("/itrack/emit", async (req, res)=> {
         let newTransaction = transaction.filter(items=> JSON.parse(items.seller).email === req.body.sellerEmail )
         // let trans = await Transact.find()
         for (let items of newTransaction) {
-            let dueDate = items.duePayDate.split("-").reverse().join("/")
-            // console.log(dueDate)
-            if (dueDate === currentDate) {
+            let dueDate = items.duePayDate.split("-").reverse().join("/").split("/")
+            let splitCurrent = currentDate.split("/")
+            console.log(dueDate, splitCurrent)
+            if ((parseFloat(dueDate[2]) < parseFloat(splitCurrent[2]))) {
+                dueArr.push(items)
+            } else if ( (parseFloat(dueDate[0]) >= parseFloat(splitCurrent[0])) && (parseFloat(dueDate[1]) <= parseFloat(splitCurrent[1])) ) {
+                dueArr.push(items)
+            } else if ( (parseFloat(dueDate[0]) <= parseFloat(splitCurrent[0])) && (parseFloat(dueDate[1]) >= parseFloat(splitCurrent[1])) && (parseFloat(dueDate[2]) >= parseFloat(splitCurrent[2])) ) {
                 dueArr.push(items)
             }
+
+
+            // if ( (parseFloat(dueDate[0]) <= parseFloat(splitCurrent[0])) && (parseFloat(dueDate[1]) <= parseFloat(splitCurrent[1])) && (parseFloat(dueDate[2]) <= parseFloat(splitCurrent[2])) ) {
+                
+            // }
         }
         if (dueArr.length >= 1) {
             res.status(200).send({message: dueArr})
